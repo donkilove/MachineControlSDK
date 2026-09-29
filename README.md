@@ -1,4 +1,4 @@
-# MachineControl
+# MachineControlSDK
 
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/10.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -18,7 +18,7 @@
 ## 安装
 
 ```bash
-dotnet add package MachineControl --version 0.3.1 \
+dotnet add package MachineControlSDK --version 0.4.0 \
   --source "https://nuget.pkg.github.com/donkilove/index.json"
 ```
 
