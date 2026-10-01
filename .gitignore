@@ -3,3 +3,9 @@ obj/
 *.user
 .vs/
 out/
+
+# 发版打包产物（nupkg 不入库）
+release/
+
+# 测试运行时 TEMP 重定向目录
+.tmp/
