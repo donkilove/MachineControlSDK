@@ -161,16 +161,19 @@ public sealed class MachineWorker
         ser.Write(MachineProtocol.BuildLine(command));
 
         var sb = new StringBuilder();
-        var start = DateTime.UtcNow;
-        var lastData = start;
-        while (DateTime.UtcNow - start < TimeSpan.FromMilliseconds(TotalAckBudgetMs))
+        // MC-02：Stopwatch 单调计时——DateTime.UtcNow 受 NTP 回拨/跳变影响会失真 ACK 窗口
+        //（回拨则空闲超时延长至多秒级，跳前则提前判失败）；与 BurnWorker 同口径。
+        // sinceStart 对齐总预算、sinceData 对齐空闲/帧尾判定（等价于原 start/lastData 差值）
+        var sinceStart = System.Diagnostics.Stopwatch.StartNew();
+        var sinceData = System.Diagnostics.Stopwatch.StartNew();
+        while (sinceStart.ElapsedMilliseconds < TotalAckBudgetMs)
         {
             ct.ThrowIfCancellationRequested();
             var chunk = ser.ReadAvailable();
             if (chunk.Length > 0)
             {
                 sb.Append(chunk);
-                lastData = DateTime.UtcNow;   // 审计 MC-06：收到数据刷新空闲计时——分片迟到不再整体判失败
+                sinceData.Restart();   // 审计 MC-06：收到数据刷新空闲计时——分片迟到不再整体判失败
                 if (sb.Length > MaxAckLength)
                 {
                     // 审核修复：回复长度上限，防畸形/恶意长帧刷爆窗口
@@ -183,7 +186,7 @@ public sealed class MachineWorker
                     break;
                 }
             }
-            else if (DateTime.UtcNow - lastData >= TimeSpan.FromMilliseconds(sb.Length > 0 ? FrameTailMs : IdleAckWindowMs))
+            else if (sinceData.ElapsedMilliseconds >= (sb.Length > 0 ? FrameTailMs : IdleAckWindowMs))
             {
                 // 审计 MC-08：收到过数据 → 帧尾窗口判定（无换行回复快速判定，不等满空闲超时）；
                 // 完全无数据 → 空闲超时（无响应）
