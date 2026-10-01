@@ -19,6 +19,12 @@ public sealed class MockSerialChannel : ISerialChannel
     /// <summary>设置后 Open 将抛出 IOException（模拟占用/拒绝访问）</summary>
     public string? OpenError { get; set; }
 
+    /// <summary>设置后 Close 将抛出 IOException（模拟关闭时驱动故障——M67 收尾噪音注入）</summary>
+    public string? CloseError { get; set; }
+
+    /// <summary>设置后 Dispose 将抛出 IOException（模拟释放时驱动故障——M67 收尾噪音注入）</summary>
+    public string? DisposeError { get; set; }
+
     /// <summary>最近一次成功 Open 的串口名（未成功打开过为 null）</summary>
     public string? LastOpenedPort { get; private set; }
 
@@ -100,9 +106,21 @@ public sealed class MockSerialChannel : ISerialChannel
         _delayed.RemoveAll(d => d.DueAt <= now);
     }
 
-    public void Close() => IsOpen = false;
+    public void Close()
+    {
+        if (CloseError is not null)
+        {
+            throw new IOException(CloseError);
+        }
+
+        IsOpen = false;
+    }
 
     public void Dispose()
     {
+        if (DisposeError is not null)
+        {
+            throw new IOException(DisposeError);
+        }
     }
 }

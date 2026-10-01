@@ -306,6 +306,44 @@ public class MachineWorkerTests
         Assert.False(port.IsOpen);
     }
 
+    // ---- M67（规格 MachineWorker/docs/specs/m67-machine-serial-close-isolation.md）：
+    //      finally 内 Close/Dispose 异常属收尾噪音——不得逃逸覆盖返回值、
+    //      不得触发整轮重试的 AT+IO 物理动作重放（对照 BurnWorker 收尾噪音口径） ----
+
+    [Fact]
+    public async Task MachineWorker_CloseThrowsOnSuccess_StillReturnsTrueWithoutRetry()
+    {
+        // AC-1：移动全部 ACK 成功 + Close 抛异常（驱动挂死形态）→ 仍返回 true、无重试重发
+        var port = new MockSerialChannel { CloseError = "驱动挂死" };
+        port.EnqueueResponse("ok\r\n");
+        port.EnqueueResponse("ok");
+        var statuses = new List<string>();
+        var worker = new MachineWorker(() => port, statuses.Add);
+
+        var ok = await worker.MoveToAreaAsync(NewRequest(), CancellationToken.None);
+
+        Assert.True(ok);                        // 修复前：IOException 从 finally 逃逸覆盖 return true
+        Assert.Equal(2, port.Writes.Count);     // 无重试 → 无 AT+IO 物理动作重放
+        Assert.Contains(statuses, s => s.Contains("关闭机台控制串口异常"));
+    }
+
+    [Fact]
+    public async Task MachineWorker_DisposeThrowsOnAckFailure_StillRetriesNormally()
+    {
+        // AC-2：第一轮 ACK 失败 + Dispose 抛异常 → 收尾噪音隔离，第二轮正常重试成功
+        var port = new MockSerialChannel { DisposeError = "释放挂死" };
+        port.EnqueueResponse("ERROR\r\n");   // 第一轮：第一条 ACK 失败 → 整轮重试
+        port.EnqueueResponse("ok\r\n");      // 第二轮：全部成功
+        port.EnqueueResponse("ok");
+        var worker = new MachineWorker(() => port);
+
+        var ok = await worker.MoveToAreaAsync(NewRequest(), CancellationToken.None);
+
+        Assert.True(ok);
+        // 与既有 FirstRoundAckFails 用例同构：第一轮 1 条 + 第二轮 2 条 = 3 条（重试语义不受收尾噪音影响）
+        Assert.Equal(3, port.Writes.Count);
+    }
+
     // ---- 审计 MC-03：串口残留数据不得干扰 ACK 判定（ResetInputBuffer 对齐 DiscardInBuffer） ----
 
     [Fact]

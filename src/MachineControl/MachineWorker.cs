@@ -124,13 +124,30 @@ public sealed class MachineWorker
             }
             finally
             {
+                // M67（对照 BurnWorker 收尾噪音口径）：Close/Dispose 异常属收尾噪音——
+                // 不得从 finally 逃逸覆盖返回值（移动已成功时会被判失败 → 整轮重试 →
+                // AT+IO 物理动作重放），也不得干扰 catch 的重试/返回语义。异常仅记状态回调。
                 if (ser is { IsOpen: true })
                 {
-                    ser.Close();
-                    _status?.Invoke($"已关闭机台控制串口 {request.MachineSerial}");
+                    try
+                    {
+                        ser.Close();
+                        _status?.Invoke($"已关闭机台控制串口 {request.MachineSerial}");
+                    }
+                    catch (Exception closeEx)
+                    {
+                        _status?.Invoke($"关闭机台控制串口异常（收尾噪音，不影响移动结果）: {closeEx.Message}");
+                    }
                 }
 
-                ser?.Dispose();
+                try
+                {
+                    ser?.Dispose();
+                }
+                catch (Exception disposeEx)
+                {
+                    _status?.Invoke($"释放机台控制串口异常（收尾噪音）: {disposeEx.Message}");
+                }
             }
         }
 
