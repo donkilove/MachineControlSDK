@@ -239,6 +239,57 @@ public class MachineWorkerTests
             () => worker.MoveToAreaAsync(new MoveRequest(MachineSerial, true, settleSeconds), CancellationToken.None));
     }
 
+    // ---- 审计 MC-03（批1）：SettleSeconds 大有限值防护——超过 Task.Delay 实际可等待上限
+    //      （uint.MaxValue-1 ms ≈ 49.7 天）的有限正值须入口立即抛参。修复前此类值在
+    //      Task.Delay 内抛异常（OverflowException / ArgumentOutOfRangeException("delay")）
+    //      落入 catch 被当作机台错误 → 整轮重试 → AT+IO 物理动作重放。 ----
+
+    [Fact]
+    public async Task MoveToAreaAsync_HugeFiniteSettleSeconds_ThrowsArgumentOutOfRangeWithoutOpeningPort()
+    {
+        var port = new MockSerialChannel();
+        // 修复前：两轮 ACK 全部成功（4 条回复）→ 到位等待 Task.Delay 溢出 → 误判机台错误重试后 false
+        for (var i = 0; i < 4; i++)
+        {
+            port.EnqueueResponse("ok\r\n");
+        }
+
+        var worker = new MachineWorker(() => port);
+
+        var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => worker.MoveToAreaAsync(new MoveRequest(MachineSerial, true, 1e300), CancellationToken.None));
+
+        Assert.Equal("request", ex.ParamName);
+        Assert.False(port.IsOpen);              // 入口校验先于任何串口操作
+        Assert.Null(port.LastOpenedPort);       // Open 未被调用
+        Assert.Empty(port.Writes);              // 无任何指令写入（无 AT+IO 物理动作）
+    }
+
+    // ---- 审计 MC-03（批1）补修正：Task.Delay 实际上限为 uint.MaxValue-1 ms（≈49.7 天）而非
+    //      TimeSpan.MaxValue——两者之间的有限值（如 5e6 秒 ≈ 57.9 天）在旧阈值下仍会走
+    //      "ACK 成功 → Delay 抛 ArgumentOutOfRangeException("delay") → 误判机台错误 → 重试"残留路径 ----
+
+    [Fact]
+    public async Task MoveToAreaAsync_SettleSecondsBeyondTaskDelayLimit_ThrowsArgumentOutOfRangeWithoutOpeningPort()
+    {
+        var port = new MockSerialChannel();
+        // 修复前（旧阈值 TimeSpan.MaxValue）：5e6 秒 < 旧阈值不抛参 → ACK 成功后 Delay 抛参被吞 → 重试后 false
+        for (var i = 0; i < 4; i++)
+        {
+            port.EnqueueResponse("ok\r\n");
+        }
+
+        var worker = new MachineWorker(() => port);
+
+        var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => worker.MoveToAreaAsync(new MoveRequest(MachineSerial, true, 5e6), CancellationToken.None));
+
+        Assert.Equal("request", ex.ParamName);
+        Assert.False(port.IsOpen);              // 入口校验先于任何串口操作
+        Assert.Null(port.LastOpenedPort);       // Open 未被调用
+        Assert.Empty(port.Writes);              // 无任何指令写入（无 AT+IO 物理动作）
+    }
+
     // ---- 审计 MC-01：宿主状态回调异常隔离（回调抛异常不得被当作机台错误） ----
 
     [Fact]

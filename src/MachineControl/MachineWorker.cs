@@ -67,6 +67,16 @@ public sealed class MachineWorker
             throw new ArgumentOutOfRangeException(
                 nameof(request), request.SettleSeconds, "SettleSeconds 必须为有限非负数（秒）");
         }
+        if (request.SettleSeconds > TimeSpan.FromMilliseconds(uint.MaxValue - 1).TotalSeconds)
+        {
+            // 审计 MC-03（批1）：大有限值的溢出/超限异常不得落入 catch 被当作机台错误
+            //（→ 整轮重试 → AT+IO 物理动作重放），须入口立即抛参。阈值对齐 Task.Delay
+            // 实际可等待上限（uint.MaxValue-1 ms ≈ 49.7 天）——而非 TimeSpan.MaxValue，
+            // 否则介于两者之间的值（如 5e6 秒）仍会在 ACK 成功后由 Delay 抛参触发误判重试。
+            throw new ArgumentOutOfRangeException(
+                nameof(request), request.SettleSeconds,
+                $"SettleSeconds 超出可等待上限（{TimeSpan.FromMilliseconds(uint.MaxValue - 1).TotalDays:0.#} 天）");
+        }
 
         for (var retry = 0; retry < MaxAttempts; retry++)
         {
