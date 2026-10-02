@@ -18,7 +18,7 @@
 ## 安装
 
 ```bash
-dotnet add package MachineControlSDK --version 0.4.0 \
+dotnet add package MachineControlSDK --version 0.5.1 \
   --source "https://nuget.pkg.github.com/donkilove/index.json"
 ```
 
@@ -75,6 +75,9 @@ dotnet test MachineControl.sln
 
 ## 版本历史
 
+- **v0.5.1**（2026-10-02）—— 审计修复批次：SettleSeconds 大有限值入口校验（阈值对齐 `Task.Delay` 实际可等待上限 uint.MaxValue-1 ms ≈ 49.7 天，超限立即抛参，杜绝溢出/超限异常被误判机台错误触发整轮重试的 AT+IO 物理动作重放）；README 契约数字对齐（安装示例/版本历史/测试计数）（64 测试全绿）
+- **v0.5.0**（2026-10-01）—— M67 收尾异常隔离：finally 中 Close/Dispose 异常降级为收尾噪音状态回调，不再覆盖返回值触发整轮重试（杜绝 AT+IO 物理动作重放）；MC-02 ACK 窗口改用 Stopwatch 单调计时（防 NTP 回拨/跳变失真窗口）（62 测试全绿）
+- **v0.4.0**（2026-09-29）—— 包更名 MachineControl → MachineControlSDK：PackageId/RepositoryUrl 与 README 标题、安装示例同步；程序集与命名空间不变，消费方仅需切换 PackageReference（60 测试全绿）
 - **v0.3.2**（2026-08-29）—— 复审修复批次：解码缓冲溢出防护（1 字节输入可产 2 字符）、解码状态随会话重置（Open/ResetInputBuffer）、Mock 延迟响应到期项清除、Mock IsOpen 语义对齐真实通道（60 测试全绿）
 - **v0.3.1**（2026-08-29）—— 审计修复批次（MC-01~08）：宿主状态回调异常隔离（杜绝物理动作重放）、Mock ResetInputBuffer 对齐 DiscardInBuffer、Open 失败路径释放实例、跨批次 UTF-8 解码、Read 超时不误判机台错误、ACK 等待改滑动窗口（分片迟到可等齐）+ 帧尾快速判定（无换行回复不等满空闲）、MachineSerial 入口校验（53 测试全绿）
 - **v0.3.0**（2026-08-24）—— 升级 .NET 8 → .NET 10（TFM/CI setup-dotnet 10.0.x/依赖）；净版 net10 行为一致（31 测试全绿）
@@ -91,7 +94,7 @@ src/MachineControl/            类库（net10.0，NuGet 包 MachineControl）
     ├── ISerialChannel.cs      通道抽象（可注入自定义实现）
     ├── SerialPortChannel.cs   System.IO.Ports 实现
     └── MockSerialChannel.cs   可编程模拟通道
-tests/MachineControl.Tests/    协议 + 执行器测试（58 个）
+tests/MachineControl.Tests/    协议 + 执行器测试（64 个）
 ```
 
 ## 许可协议
