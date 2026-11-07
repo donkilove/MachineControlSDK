@@ -9,3 +9,7 @@ release/
 
 # 测试运行时 TEMP 重定向目录
 .tmp/
+
+# 测试产物（dotnet test 默认在项目目录下生成 TestResults/）
+TestResults/
+*.trx
